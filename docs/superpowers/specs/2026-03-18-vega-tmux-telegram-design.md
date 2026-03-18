@@ -12,8 +12,10 @@ Zwei Features fuer bessere VEGA-Nutzung:
 |---|---|---|
 | `vega` Bash-Funktion | Firmenrechner `~/.bashrc` | Shell-Funktion |
 | SessionStart-Hook | Firmenrechner `~/.claude/settings.json` | Claude Code Hook |
+| `check-telegram.sh` | Firmenrechner `~/.claude/scripts/` | Helper-Script fuer Hook + on-demand |
 | `@VEGA_KeepHerBusy_bot` | Telegram | Ausgangskanal + Inbox |
 | Token-Datei | MiniPC `~/.vega-telegram-token` | chmod 600 |
+| Offset-Datei | MiniPC `~/.vega-telegram-offset` | Automatisch erstellt |
 
 ## 1. `vega` Bash-Funktion
 
@@ -26,8 +28,9 @@ Shell-Funktion in `~/.bashrc` auf dem Firmenrechner.
 - `vega business-lunch` → tmux-Session "business-lunch" in `/home/mschlipp/business-lunch/`
 - `vega minipc-setup` → tmux-Session "minipc-setup" in `/home/mschlipp/minipc-setup/`
 - `vega` (ohne Argument) → allgemeine Session "vega" in `/home/mschlipp/`
+- Unbekannter Name → Fehlermeldung: "Unbekanntes Projekt: <name>. Bekannt: family-hub, crypto-monitor, business-lunch, minipc-setup"
 - Session existiert bereits → `tmux attach -t <name>`
-- Session existiert nicht → `tmux new -s <name> -c <dir> "claude"`
+- Session existiert nicht → `tmux new -s <name> -c <dir>` mit Shell (Claude wird per `send-keys` gestartet, damit die Shell ueberlebt wenn Claude beendet wird)
 
 ### Implementierung
 
@@ -40,13 +43,18 @@ vega() {
     crypto-monitor)  dir="/home/mschlipp/crypto-monitor" ;;
     business-lunch)  dir="/home/mschlipp/business-lunch" ;;
     minipc-setup)    dir="/home/mschlipp/minipc-setup" ;;
-    *)               dir="/home/mschlipp" ;;
+    vega)            dir="/home/mschlipp" ;;
+    *)
+      echo "Unbekanntes Projekt: $session"
+      echo "Bekannt: family-hub, crypto-monitor, business-lunch, minipc-setup"
+      return 1
+      ;;
   esac
 
   if tmux has-session -t "$session" 2>/dev/null; then
     tmux attach -t "$session"
   else
-    tmux new -s "$session" -c "$dir" "claude"
+    tmux new -s "$session" -c "$dir" \; send-keys "claude" Enter
   fi
 }
 ```
@@ -58,8 +66,9 @@ Claude Code Hook in `~/.claude/settings.json`. Wird bei jedem Claude-Code-Start 
 ### Verhalten
 
 1. Ruft `getUpdates` auf dem VEGA-Bot auf (via SSH ueber MiniPC)
-2. Wenn neue Nachrichten vorhanden → zeigt sie als Kontext an
-3. Setzt den Offset, damit Nachrichten nicht doppelt gelesen werden
+2. Filtert nur Nachrichten von Ward (chat_id 895154565)
+3. Wenn neue Nachrichten vorhanden → zeigt sie als Kontext an (Text + Captions)
+4. Setzt den Offset, damit Nachrichten nicht doppelt gelesen werden
 
 ### Hook-Konfiguration
 
@@ -71,7 +80,7 @@ Claude Code Hook in `~/.claude/settings.json`. Wird bei jedem Claude-Code-Start 
         "hooks": [
           {
             "type": "command",
-            "command": "ssh brain31@100.123.179.24 'TOKEN=$(cat ~/.vega-telegram-token) && curl -s \"https://api.telegram.org/bot${TOKEN}/getUpdates\"' 2>/dev/null | python3 -c \"import sys,json; data=json.load(sys.stdin); msgs=[m['message'] for m in data.get('result',[]) if 'message' in m]; print(json.dumps({'hookSpecificOutput':{'hookEventName':'SessionStart','additionalContext':'Telegram-Inbox: ' + chr(10).join([m['from'].get('first_name','?')+': '+m.get('text','[Datei/Bild]') for m in msgs])}}) if msgs else '')\"",
+            "command": "~/.claude/scripts/check-telegram.sh",
             "timeout": 15,
             "statusMessage": "Checking Telegram inbox..."
           }
@@ -82,29 +91,38 @@ Claude Code Hook in `~/.claude/settings.json`. Wird bei jedem Claude-Code-Start 
 }
 ```
 
-### Offset-Management
+### `check-telegram.sh`
 
-Nach dem Lesen wird der hoechste `update_id + 1` als Offset gespeichert, damit beim naechsten Check nur neue Nachrichten gelesen werden. Der Offset wird als Parameter an `getUpdates` uebergeben und auf dem MiniPC in `~/.vega-telegram-offset` gespeichert.
+Separates Script statt Inline-Einzeiler fuer Wartbarkeit. Ablauf:
+
+1. Liest Offset von MiniPC: `ssh brain31@minipc "cat ~/.vega-telegram-offset 2>/dev/null || echo 0"`
+2. Ruft `getUpdates?offset=<offset>` auf (via SSH/MiniPC)
+3. Filtert Nachrichten nach `chat_id == 895154565`
+4. Fuer jede Nachricht: Text oder Caption extrahieren, Fotos/Dokumente als `[Bild]`/`[Datei: name]` markieren
+5. Berechnet neuen Offset: `max(update_id) + 1`
+6. Schreibt neuen Offset zurueck: `ssh brain31@minipc "echo <offset> > ~/.vega-telegram-offset"`
+7. Gibt JSON mit `hookSpecificOutput.additionalContext` aus (oder nichts wenn keine Nachrichten)
+8. Bei SSH/Curl-Fehler: gibt nichts aus (kein Fehler-Output, Hook schlaegt still fehl)
 
 ## 3. On-Demand "check Telegram"
 
-Ward sagt im Terminal "check Telegram" (oder aehnlich). VEGA fuehrt dann denselben Check wie beim SessionStart durch, aber zusaetzlich mit Datei/Bild-Download.
+Ward sagt im Terminal "check Telegram" (oder aehnlich). VEGA fuehrt denselben Check durch wie beim SessionStart, aber zusaetzlich mit Datei/Bild-Download.
 
 ### Text-Nachrichten
 
-Gleich wie SessionStart: `getUpdates` aufrufen, Nachrichten anzeigen, Offset setzen.
+Gleich wie SessionStart: `getUpdates` aufrufen, Nachrichten anzeigen (inkl. Captions), Offset setzen.
 
 ### Bilder und Dateien
 
 1. `getUpdates` liefert `photo` oder `document` Felder mit `file_id`
-2. `getFile` aufrufen um `file_path` zu erhalten
+2. `getFile` aufrufen um `file_path` zu erhalten (via SSH/MiniPC)
 3. Datei per SSH vom MiniPC herunterladen:
    ```bash
-   ssh brain31@100.123.179.24 "TOKEN=\$(cat ~/.vega-telegram-token) && curl -s 'https://api.telegram.org/file/bot\${TOKEN}/<file_path>' -o /tmp/<filename>"
-   scp brain31@100.123.179.24:/tmp/<filename> /tmp/<filename>
+   ssh brain31@100.123.179.24 "TOKEN=\$(cat ~/.vega-telegram-token) && curl -s 'https://api.telegram.org/file/bot\${TOKEN}/<file_path>' -o /tmp/vega-<timestamp>-<original_filename>"
+   scp brain31@100.123.179.24:/tmp/vega-<timestamp>-<original_filename> /tmp/vega-<timestamp>-<original_filename>
    ```
-4. Datei ist lokal unter `/tmp/<filename>` verfuegbar
-5. VEGA zeigt an: "Datei empfangen: /tmp/<filename>"
+4. Dateinamen enthalten Timestamp um Kollisionen zu vermeiden
+5. VEGA zeigt an: "Datei empfangen: /tmp/vega-<timestamp>-<original_filename>"
 
 ## 4. VEGA-Bot Ausgangskanal
 
@@ -116,6 +134,12 @@ ssh brain31@100.123.179.24 'TOKEN=$(cat ~/.vega-telegram-token) && curl -s -X PO
 
 Anwendungsfaelle: Reminder, Status-Updates, Benachrichtigungen.
 
+## Sicherheit
+
+- **chat_id-Filter:** Nur Nachrichten von Ward (895154565) werden verarbeitet. Fremde Nachrichten werden ignoriert.
+- **Token-Sicherheit:** Token liegt nur auf MiniPC (chmod 600). Wird per Shell-Variable expandiert, nicht als CLI-Argument sichtbar. Akzeptables Restrisiko fuer Single-User-MiniPC.
+- **Bot-Privacy:** Bot sollte in BotFather "Group Privacy" aktiviert haben (Default). Bot nicht zu Gruppen hinzufuegen.
+
 ## Nicht im Scope
 
 - Live-Chat ueber Telegram (vertagt, benoetigt Loesung fuer Push zum Firmenrechner)
@@ -125,8 +149,9 @@ Anwendungsfaelle: Reminder, Status-Updates, Benachrichtigungen.
 ## Dateiaenderungen
 
 1. **Firmenrechner `~/.bashrc`**: `vega` Funktion hinzufuegen
-2. **Firmenrechner `~/.claude/settings.json`**: SessionStart-Hook hinzufuegen
-3. **MiniPC `~/.vega-telegram-offset`**: Wird automatisch erstellt (Offset-Speicher)
+2. **Firmenrechner `~/.claude/scripts/check-telegram.sh`**: Neues Script
+3. **Firmenrechner `~/.claude/settings.json`**: SessionStart-Hook hinzufuegen
+4. **MiniPC `~/.vega-telegram-offset`**: Wird automatisch erstellt (Offset-Speicher)
 
 ## Abhaengigkeiten
 

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/mschlipp/.claude/scripts/check-telegram.sh",
+            "timeout": 15,
+            "statusMessage": "Checking Telegram inbox..."
+          }
+        ]
+      }
+    ]
+  }
+}

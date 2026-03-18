@@ -1,0 +1,3 @@
+# Keine Credentials oder Passphrasen
+*.gpg
+.backup-passphrase

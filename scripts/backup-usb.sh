@@ -44,20 +44,28 @@ if [ ! -f "$PASSPHRASE_FILE" ]; then
     exit 1
 fi
 
-# --- USB-Stick finden (exFAT, von Windows gemountet unter /mnt/<laufwerk>/) ---
+# --- USB-Stick finden (exFAT, Windows-Laufwerk via drvfs) ---
 # Erkennung ueber Marker-Datei: BACKUP-A.marker oder BACKUP-B.marker im Root
+# WSL mountet nur C: automatisch — andere Laufwerke muessen wir selbst mounten
 STICK_LABEL=""
 STICK_MOUNT=""
 
-for drive in /mnt/[d-z]; do
-    [ -d "$drive" ] || continue
+for letter in D E F G H; do
+    mountpoint="/mnt/${letter,,}"
+    # Laufwerk mounten falls noch nicht gemountet
+    if ! mountpoint -q "$mountpoint" 2>/dev/null; then
+        sudo mkdir -p "$mountpoint"
+        sudo mount -t drvfs "${letter}:" "$mountpoint" 2>/dev/null || continue
+    fi
     for marker in BACKUP-A BACKUP-B; do
-        if [ -f "$drive/${marker}.marker" ]; then
+        if [ -f "$mountpoint/${marker}.marker" ]; then
             STICK_LABEL="$marker"
-            STICK_MOUNT="$drive"
+            STICK_MOUNT="$mountpoint"
             break 2
         fi
     done
+    # Kein Backup-Stick auf diesem Laufwerk — wieder unmounten
+    sudo umount "$mountpoint" 2>/dev/null || true
 done
 
 if [ -z "$STICK_LABEL" ]; then

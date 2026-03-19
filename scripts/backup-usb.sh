@@ -34,13 +34,28 @@ CUSTOM_SERVICES=(
     "crypto-monitor.service"
 )
 
+TELEGRAM_TOKEN_FILE="$HOME/.vega-telegram-token"
+TELEGRAM_CHAT_ID="895154565"
+
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | tee -a "$LOGFILE"
+}
+
+notify() {
+    local msg="$1"
+    if [ -f "$TELEGRAM_TOKEN_FILE" ]; then
+        local token
+        token=$(cat "$TELEGRAM_TOKEN_FILE")
+        curl -s -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "text=${msg}" > /dev/null 2>&1 || true
+    fi
 }
 
 # --- Passphrase pruefen ---
 if [ ! -f "$PASSPHRASE_FILE" ]; then
     log "ERROR: Passphrase file $PASSPHRASE_FILE not found. Aborting."
+    notify "BACKUP FEHLER: Passphrase-Datei nicht gefunden!"
     exit 1
 fi
 
@@ -70,6 +85,7 @@ done
 
 if [ -z "$STICK_LABEL" ]; then
     log "WARNING: No USB stick found (BACKUP-A / BACKUP-B marker). Skipping backup."
+    notify "BACKUP: Kein USB-Stick gefunden. Bitte Stick einstecken!"
     exit 0
 fi
 
@@ -81,7 +97,7 @@ log "Starting backup to $STICK_LABEL ($BACKUP_PATH)"
 
 # --- Temporaeres Verzeichnis fuer Staging ---
 STAGING=$(mktemp -d)
-trap 'rm -rf "$STAGING"' EXIT
+trap 'rc=$?; rm -rf "$STAGING"; if [ $rc -ne 0 ]; then notify "BACKUP FEHLER: Script abgebrochen (Exit $rc) auf ${STICK_LABEL:-unbekannt}!"; fi' EXIT
 
 # Projektverzeichnisse kopieren (ohne .venv, .cache, .vscode-server)
 for src in "${BACKUP_DIRS[@]}"; do
@@ -156,3 +172,4 @@ fi
 
 # Kein Unmount noetig — Windows verwaltet den Mount.
 log "Backup finished on $STICK_LABEL ($STICK_MOUNT)."
+notify "BACKUP OK: ${BACKUP_NAME} (${BACKUP_SIZE}) auf ${STICK_LABEL}"

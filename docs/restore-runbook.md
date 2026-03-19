@@ -165,32 +165,15 @@ ssh brain31@100.123.179.24
 
 ## Phase 5: Backup entschluesseln
 
-### 5.1 USB-Stick mounten
+### 5.1 USB-Stick einstecken
 
-USB-Stick einstecken. In WSL2 braucht man `usbipd-win`:
+USB-Stick (exFAT) einstecken. Windows mountet ihn automatisch (z.B. als `E:`).
+WSL sieht ihn unter `/mnt/e/` (oder anderer Laufwerksbuchstabe).
 
-**Windows (PowerShell Admin):**
-```powershell
-# usbipd installieren (einmalig):
-winget install usbipd
-
-# USB-Geraete auflisten:
-usbipd list
-
-# Stick an WSL binden:
-usbipd bind --busid <BUS-ID>
-usbipd attach --wsl --busid <BUS-ID>
-```
-
-**WSL:**
 ```bash
-# Device finden:
-lsblk
-
-# Mounten:
-sudo mkdir -p /mnt/usb
-sudo mount /dev/sdX1 /mnt/usb
-ls /mnt/usb/
+# Pruefen welcher Stick es ist:
+ls /mnt/*/BACKUP-*.marker 2>/dev/null
+# Erwartete Ausgabe z.B.: /mnt/e/BACKUP-A.marker
 ```
 
 ### 5.2 Backup entschluesseln
@@ -198,11 +181,11 @@ ls /mnt/usb/
 ```bash
 mkdir -p /tmp/restore
 
-# Neuestes Backup finden:
-ls -lt /mnt/usb/backup-*.tar.gz.gpg
+# Neuestes Backup finden (Laufwerk anpassen):
+ls -lt /mnt/e/backup-*.tar.gz.gpg
 
 # Entschluesseln + entpacken:
-gpg --decrypt /mnt/usb/backup-YYYY-MM-DD-X.tar.gz.gpg | tar -xzf - -C /tmp/restore/
+gpg --decrypt /mnt/e/backup-YYYY-MM-DD-X.tar.gz.gpg | tar -xzf - -C /tmp/restore/
 
 # Inhalt pruefen:
 ls /tmp/restore/

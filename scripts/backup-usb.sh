@@ -44,28 +44,24 @@ if [ ! -f "$PASSPHRASE_FILE" ]; then
     exit 1
 fi
 
-# --- USB-Stick finden ---
+# --- USB-Stick finden (exFAT, von Windows gemountet unter /mnt/<laufwerk>/) ---
+# Erkennung ueber Marker-Datei: BACKUP-A.marker oder BACKUP-B.marker im Root
 STICK_LABEL=""
 STICK_MOUNT=""
 
-for label in BACKUP-A BACKUP-B; do
-    MOUNT_POINT="/mnt/$label"
-    DEV=$(blkid -L "$label" 2>/dev/null || true)
-    if [ -n "$DEV" ]; then
-        STICK_LABEL="$label"
-        STICK_MOUNT="$MOUNT_POINT"
-        # Mounten falls noetig
-        if ! mountpoint -q "$STICK_MOUNT" 2>/dev/null; then
-            sudo mkdir -p "$STICK_MOUNT"
-            sudo mount "$DEV" "$STICK_MOUNT"
-            log "Mounted $DEV ($STICK_LABEL) at $STICK_MOUNT"
+for drive in /mnt/[d-z]; do
+    [ -d "$drive" ] || continue
+    for marker in BACKUP-A BACKUP-B; do
+        if [ -f "$drive/${marker}.marker" ]; then
+            STICK_LABEL="$marker"
+            STICK_MOUNT="$drive"
+            break 2
         fi
-        break
-    fi
+    done
 done
 
 if [ -z "$STICK_LABEL" ]; then
-    log "WARNING: No USB stick found (BACKUP-A / BACKUP-B). Skipping backup."
+    log "WARNING: No USB stick found (BACKUP-A / BACKUP-B marker). Skipping backup."
     exit 0
 fi
 
@@ -150,6 +146,5 @@ if [ "$STICK_FREE" -lt "$MIN_FREE_KB" ]; then
         done
 fi
 
-# --- Unmount ---
-sudo umount "$STICK_MOUNT" 2>/dev/null || true
-log "Backup finished. Stick $STICK_LABEL unmounted."
+# Kein Unmount noetig — Windows verwaltet den Mount.
+log "Backup finished on $STICK_LABEL ($STICK_MOUNT)."

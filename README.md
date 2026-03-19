@@ -47,18 +47,14 @@ Das Script:
 
 ### 3. USB-Sticks vorbereiten
 
-Zwei USB-Sticks mit ext4 formatieren und labeln:
+Zwei USB-Sticks als **exFAT** formatieren (Windows: Rechtsklick → Formatieren).
+Dann Marker-Datei im Root des Sticks erstellen:
 
-```bash
-# Stick einstecken, Device finden:
-lsblk
+- Erster Stick: Leere Datei `BACKUP-A.marker` anlegen
+- Zweiter Stick: Leere Datei `BACKUP-B.marker` anlegen
 
-# Erster Stick (ACHTUNG: loescht alle Daten auf dem Stick!):
-sudo mkfs.ext4 -L BACKUP-A /dev/sdX1
-
-# Zweiter Stick:
-sudo mkfs.ext4 -L BACKUP-B /dev/sdX1
-```
+Windows mountet die Sticks automatisch, WSL sieht sie unter `/mnt/<laufwerk>/`.
+Kein `usbipd` oder manuelles Mounten noetig — komplett headless.
 
 ### 4. Testlauf
 

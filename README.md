@@ -10,9 +10,19 @@ minipc-setup/
     backup-usb.sh        # Taegliches verschluesseltes USB-Backup (Cronjob 4:00)
     export-config.sh     # Service Files + Cronjobs ins Repo exportieren
     setup-backup.sh      # Ersteinrichtung (einmalig ausfuehren)
+  docs/
+    restore-runbook.md   # Komplette From-Scratch-Anleitung
   service-files/         # Exportierte systemd .service Dateien
   cronjobs/              # Exportierte Cronjob-Listen
 ```
+
+## Was wird gesichert?
+
+- **Projekte:** family-hub, family-hub-test, business-lunch, crypto-monitor, vega-memory, minipc-setup (ohne .venv)
+- **Credentials:** SSH-Keys, Git-Credentials, Telegram-Tokens, Backup-Passphrase (separat im Passwort-Manager!)
+- **Dotfiles:** .bashrc, .profile, .gitconfig
+- **Configs:** Systemd Service Files, Caddy Config, Cronjobs
+- **System-Info:** Installierte Paketliste
 
 ## Ersteinrichtung
 
@@ -64,8 +74,7 @@ cat ~/backup.log
 
 - **Taeglich um 4:00** laeuft `backup-usb.sh` per Cronjob
 - Erkennt automatisch welcher Stick steckt (BACKUP-A oder BACKUP-B)
-- Sichert alle Projekte komplett: family-hub, family-hub-test, business-lunch, vega-memory, minipc-setup
-- Sichert SSH-Keys, Config-Dateien mit Credentials, Service Files, Cronjobs
+- Sichert alle Projekte (ohne .venv), Credentials, Dotfiles, Configs
 - Erstellt ein tar.gz-Archiv, verschluesselt mit GPG (AES256)
 - Dateiname: `backup-YYYY-MM-DD-A.tar.gz.gpg` (bzw. -B)
 - Alte Backups werden bei Platzmangel aufgeraeumt (min. 3 behalten)
@@ -78,6 +87,10 @@ So hat man immer ein Offsite-Backup.
 
 ## Backup wiederherstellen
 
+Siehe **[docs/restore-runbook.md](docs/restore-runbook.md)** fuer die komplette From-Scratch-Anleitung.
+
+Kurzversion (nur Daten zurueckspielen):
+
 ```bash
 # Archiv entschluesseln und entpacken:
 mkdir -p /tmp/restore
@@ -85,11 +98,6 @@ gpg --decrypt backup-2026-03-18-A.tar.gz.gpg | tar -xzf - -C /tmp/restore/
 
 # Inhalt pruefen:
 ls /tmp/restore/
-
-# Einzelne Dateien zurueckkopieren, z.B.:
-cp -a /tmp/restore/family-hub ~/family-hub
-cp /tmp/restore/family-hub/config.yaml ~/family-hub/config.yaml
-cp -a /tmp/restore/.ssh ~/.ssh
 ```
 
 Die Passphrase wird bei der Entschluesselung abgefragt (aus Passwort-Manager).

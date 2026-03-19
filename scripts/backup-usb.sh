@@ -5,20 +5,33 @@ LOGFILE="$HOME/backup.log"
 PASSPHRASE_FILE="$HOME/.backup-passphrase"
 TIMESTAMP=$(date +%Y-%m-%d)
 
-# Komplette Projektverzeichnisse
-BACKUP_SOURCES=(
+# Komplette Projektverzeichnisse (werden ohne .venv kopiert)
+BACKUP_DIRS=(
     "$HOME/family-hub"
     "$HOME/family-hub-test"
     "$HOME/business-lunch"
+    "$HOME/crypto-monitor"
     "$HOME/vega-memory"
     "$HOME/minipc-setup"
     "$HOME/.ssh"
 )
 
-# Systemd Service Files
-SERVICE_FILES=(
-    "/etc/systemd/system/family-hub.service"
-    "/etc/systemd/system/family-hub-test.service"
+# Einzelne Dateien (Credentials, Dotfiles, Scripts)
+BACKUP_FILES=(
+    "$HOME/.vega-telegram-token"
+    "$HOME/.vega-telegram-offset"
+    "$HOME/.gitconfig"
+    "$HOME/.git-credentials"
+    "$HOME/.bashrc"
+    "$HOME/.profile"
+    "$HOME/organize-board.sh"
+)
+
+# Custom Service Files (dynamisch alle eigenen)
+CUSTOM_SERVICES=(
+    "family-hub.service"
+    "family-hub-test.service"
+    "crypto-monitor.service"
 )
 
 log() {
@@ -66,27 +79,51 @@ log "Starting backup to $STICK_LABEL ($BACKUP_PATH)"
 STAGING=$(mktemp -d)
 trap 'rm -rf "$STAGING"' EXIT
 
-# Projekte und Verzeichnisse kopieren
-for src in "${BACKUP_SOURCES[@]}"; do
+# Projektverzeichnisse kopieren (ohne .venv, .cache, .vscode-server)
+for src in "${BACKUP_DIRS[@]}"; do
     if [ -e "$src" ]; then
         DIRNAME=$(basename "$src")
-        cp -a "$src" "$STAGING/$DIRNAME"
+        rsync -a --exclude='.venv' --exclude='.cache' --exclude='.vscode-server' \
+            "$src/" "$STAGING/$DIRNAME/"
         log "  Added $src"
     else
         log "  WARNING: $src not found, skipping"
     fi
 done
 
-# Service Files
-mkdir -p "$STAGING/service-files"
-for svc in "${SERVICE_FILES[@]}"; do
-    if [ -f "$svc" ]; then
-        cp "$svc" "$STAGING/service-files/"
+# Einzelne Dateien kopieren
+mkdir -p "$STAGING/dotfiles"
+for f in "${BACKUP_FILES[@]}"; do
+    if [ -f "$f" ]; then
+        cp "$f" "$STAGING/dotfiles/"
+        log "  Added $(basename "$f")"
+    else
+        log "  WARNING: $f not found, skipping"
     fi
 done
 
+# Service Files
+mkdir -p "$STAGING/service-files"
+for svc in "${CUSTOM_SERVICES[@]}"; do
+    SVC_PATH="/etc/systemd/system/$svc"
+    if [ -f "$SVC_PATH" ]; then
+        cp "$SVC_PATH" "$STAGING/service-files/"
+    fi
+done
+
+# Caddy Config
+if [ -f "/etc/caddy/Caddyfile" ]; then
+    mkdir -p "$STAGING/caddy"
+    cp /etc/caddy/Caddyfile "$STAGING/caddy/"
+    log "  Added Caddyfile"
+fi
+
 # Cronjob
 crontab -l > "$STAGING/crontab-brain31.txt" 2>/dev/null || true
+
+# Installierte Pakete
+apt-mark showmanual > "$STAGING/installed-packages.txt" 2>/dev/null || true
+log "  Added installed-packages.txt"
 
 # --- Tar + GPG ---
 log "Creating encrypted archive..."

@@ -9,7 +9,7 @@ mkdir -p "$SERVICE_DIR" "$CRON_DIR"
 
 # Systemd Service Files exportieren
 echo "=== Exporting service files ==="
-for svc in family-hub family-hub-test; do
+for svc in family-hub family-hub-test crypto-monitor; do
     SVC_FILE="/etc/systemd/system/${svc}.service"
     if [ -f "$SVC_FILE" ]; then
         cp "$SVC_FILE" "$SERVICE_DIR/"

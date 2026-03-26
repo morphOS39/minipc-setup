@@ -13,6 +13,8 @@ BACKUP_DIRS=(
     "$HOME/crypto-monitor"
     "$HOME/vega-memory"
     "$HOME/minipc-setup"
+    "$HOME/vps-backup"
+    "$HOME/flomily-web"
     "$HOME/.ssh"
 )
 
@@ -32,6 +34,8 @@ CUSTOM_SERVICES=(
     "family-hub.service"
     "family-hub-test.service"
     "crypto-monitor.service"
+    "flomily-beta.service"
+    "wsl-keepalive.service"
 )
 
 TELEGRAM_TOKEN_FILE="$HOME/.vega-telegram-token"

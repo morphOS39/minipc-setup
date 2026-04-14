@@ -15,6 +15,9 @@ BACKUP_DIRS=(
     "$HOME/minipc-setup"
     "$HOME/vps-backup"
     "$HOME/flomily-web"
+    "$HOME/solar-miner"
+    "$HOME/vega-inbox"
+    "$HOME/ttr-bot"
     "$HOME/.ssh"
 )
 
